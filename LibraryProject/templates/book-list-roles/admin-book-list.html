@@ -17,11 +17,11 @@
             </div>
             <div class="form-group">
                 <label for="bookCategory">Category:</label>
-                <input id="bookCategory" class="form-control" type="number" />
+                <input id="bookCategory" class="form-control" type="text" />
             </div>
             <div class="form-group">
                 <label for="bookAuthor">Author:</label>
-                <input id="bookAuthor" class="form-control" type="number" />
+                <input id="bookAuthor" class="form-control" type="text" />
             </div>
             <div class="form-group">
                 <button id="saveBtn" class="btn btn-primary">Save</button>
@@ -43,16 +43,16 @@
     </thead>
     <tbody>
         {% for book in books %}
-            <tr>
-                <td>{{ book["id"] }}</td>
-                <td>{{ book['namebook']}}</td>
-                <td>{{ book['yearbook']}}</td>
-                <td>{{ book['availablebook'] }}</td>
-                <td>{{ book["category_name"] }}</td>
-                <td>{{ book["author_name"]}}</td>
-                <td><button onclick="getBook({{ book["id"] }})" class="btn btn-secondary">Edit</button></td> 
-                <td><button onclick="deleteBook({{ book["id"] }})" class="btn btn-danger">Delete</button></td>          
-            </tr>
+        <tr>
+            <td>{{ book._id }}</td>
+            <td>{{ book.nameBook }}</td>
+            <td>{{ book.yearBook }}</td>
+            <td>{{ book.availableBook }}</td>
+            <td>{{ ', '.join(book.categoryName) }}</td>
+            <td>{{ book.authorName }}</td>
+            <td><button onclick="getBook('{{ book._id }}')" class="btn btn-secondary">Edit</button></td> 
+            <td><button onclick="deleteBook('{{ book._id }}')" class="btn btn-danger">Delete</button></td>            
+        </tr>
         {% endfor %}
     </tbody>
 </table>
@@ -65,16 +65,19 @@
         });
         if (response.ok === true) {
         const book = await response.json();
-        document.getElementById("bookId").value = book.id;
-        document.getElementById("bookYear").value = book.yearbook;
-        document.getElementById("bookName").value = book.namebook;
-        document.getElementById("bookQuantity").value = book.availablebook;
+        console.log(book);
+
+        document.getElementById("bookId").value = book._id;
+        document.getElementById("bookYear").value = book.yearBook;
+        document.getElementById("bookName").value = book.nameBook;
+        document.getElementById("bookQuantity").value = book.availableBook;
         document.getElementById("bookCategory").value = book.category_id;
         document.getElementById("bookAuthor").value = book.author_id;
         }
         else {
         // якщо сталася помилка, отримуємо повідомлення про помилку
         const error = await response.json();
+        console.log('not working');
         console.log(error.message); // і виводимо його на консоль
         }
     }
@@ -87,8 +90,8 @@
                 nameBook: bookName,
                 yearBook: parseInt(bookYear, 10),
                 availableBook: parseInt(bookQuantity, 10),
-                category_id: parseInt(bookCategory, 10),
-                author_id: parseInt(bookAuthor, 10)
+                category_id: bookCategory,
+                author_id: bookAuthor
             })
         });
         if (response.ok === true) {
@@ -109,8 +112,8 @@
                 nameBook: bookName,
                 yearBook: parseInt(bookYear, 10),
                 availableBook: parseInt(bookQuantity, 10),
-                category_id: parseInt(bookCategory, 10),
-                author_id: parseInt(bookAuthor, 10)
+                category_id: bookCategory,
+                author_id: bookAuthor
             })
         });
         if (response.ok === true) {

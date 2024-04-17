@@ -1,45 +1,92 @@
-import psycopg2
-from contextlib import contextmanager
-import json
-@contextmanager
-def connection_pstgr():
-    conn = psycopg2.connect(
-        dbname="libraryproject",
-        host="127.0.0.1",
-        user="postgres",
-        password="password",
-        port="5432"
-    )
-    cursor = conn.cursor()
-    try:
-        yield conn, cursor
-    finally:
-        cursor.close()
-        conn.close()
+from pymongo.mongo_client import MongoClient
+from pymongo.server_api import ServerApi
+from urllib.parse import quote_plus
+from bson.objectid import ObjectId
 
-def authenticate_user(email: str, password: str):
-    """
-    Checking in Users table by passed emails to LogIn form.
-    """
-    with connection_pstgr() as (conn, cursor):
-        cursor.execute("SELECT * FROM Users WHERE emailUser = %s", (email,))
-        searched_user = cursor.fetchone()
-        if searched_user and searched_user[3] == password:
-            columns = [desc[0] for desc in cursor.description]
-            user_dict = dict(zip(columns, searched_user))
-            return user_dict
-        else:
-            return None
-        
-# with connection_pstgr() as (conn, cursor):
-    # cursor.execute("SELECT * FROM Users")
-    # searched_user = cursor.fetchone()
-    # columns = [desc[0] for desc in cursor.description]
-    # print(searched_user[0])
-    # book_dict = dict(zip(columns, searched_user))
-    # inserted_book_json = json.dumps(book_dict)\
-with connection_pstgr() as (conn, cursor): 
-   user = authenticate_user("Admin@gmail.com", "password")
 
-print(user)
-# Now the connection and cursor are automatically closed after exiting the with block
+username = quote_plus('reyget')
+password = quote_plus('xPCTVF6:3u,b=qn')
+uri = "mongodb+srv://" + username + ":" + password+"@pythonweb.mbdiw74.mongodb.net/?retryWrites=true&w=majority&appName=PythonWEB"
+# Create a new client and connect to the server
+client = MongoClient(uri, server_api=ServerApi('1'))
+# Send a ping to confirm a successful connection
+try:
+    client.admin.command('ping')
+    print("Pinged your deployment. You successfully connected to MongoDB!")
+except Exception as e:
+    print(e)
+
+db = client['LibraryProject']
+
+authors_collection = db['Authors']
+categories_collection = db['Categories']
+books_collection = db['Books']
+users_collection = db['Users']
+histories_collection = db['Histories']
+
+def authenticate_user(email, password):
+    # Access the Users collection
+    users_collection = db['Users']
+    # Find the user with the specified email
+    searched_user = users_collection.find_one({"emailUser": email})
+
+    # If the user is found and the password matches, return the user document
+    if searched_user and searched_user.get("passwordUser") == password:
+        return searched_user
+
+    return None
+
+
+email = 'Admin@gmail.com'
+password = 'password'
+
+def test():
+    # user = authenticate_user(email, password)
+    # if user["is_admin"]:
+    #     template_file = 'book-list-roles/admin-book-list.html'
+    # else:
+    #     template_file = 'book-list-roles/user-book-list.html'
+
+    # # Fetching books data
+    # books_dict = books_collection.aggregate([
+    #     {
+    #         "$lookup": {
+    #             "from": "Categories",
+    #             "localField": "category_id",
+    #             "foreignField": "_id",
+    #             "as": "category"
+    #         }
+    #     },
+    #     {
+    #         "$lookup": {
+    #             "from": "Authors",
+    #             "localField": "author_id",
+    #             "foreignField": "_id",
+    #             "as": "author"
+    #         }
+    #     },
+    #     {
+    #         "$unwind": "$author"  # Unwind the "author" array to separate the documents
+    #     },
+    #     {
+    #         "$project": {
+    #             "_id": 1,
+    #             "nameBook": 1,
+    #             "yearBook": 1,
+    #             "availableBook": 1,
+    #             "categoryName": "$category.nameCategory",
+    #             "authorName": {"$concat": ["$author.nameAuthor", " ", "$author.surnameAuthor"]}
+    #         }
+    #     },
+    #     {
+    #         "$sort": {"_id": 1}
+    #     }
+    # ])
+    # print([book['categoryName'] for book in books_dict])
+    book_id = '6620023de5a4249451ed7754'
+
+    book = books_collection.find_one({"_id": ObjectId(book_id)})
+
+    print(book)
+
+test()

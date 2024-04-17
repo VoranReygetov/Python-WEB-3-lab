@@ -27,12 +27,12 @@
             <tbody>
                 {% for rent in rents %}
                     <tr>
-                        <td>{{ rent['id'] }}</td>
+                        <td>{{ rent['_id'] }}</td>
                         <td>{{ rent['user_id'] }}</td>
                         <td>{{ rent['books_id'] }}</td>
-                        <td>{{ rent['dateloan'] }}</td>
-                        <td>{{ rent['datereturn'] }}</td>
-                        <td>{{ rent['isreturned'] }}</td>                        
+                        <td>{{ rent['dateLoan'] }}</td>
+                        <td>{{ rent['dateReturn'] }}</td>
+                        <td>{{ rent['isReturned'] }}</td>                        
                     </tr>
                 {% endfor %}
             </tbody>

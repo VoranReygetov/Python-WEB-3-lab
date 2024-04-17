@@ -15,16 +15,16 @@
     <tbody>
         {% for book in books %}
             <tr>
-                <td>{{ book["id"] }}</td>
-                <td>{{ book['namebook']}}</td>
-                <td>{{ book['yearbook']}}</td>
-                <td>{{ book['availablebook'] }}</td>
-                <td>{{ book["category_name"] }}</td>
-                <td>{{ book["author_name"]}}</td>
-                {% if book["id"] in rents_book_id%}
-                <td><button onclick="rentBook({{ book["id"] }})" class="btn btn-success">Return</button></td>
-                {% elif book.get('availablebook') > 0 %}
-                <td><button onclick="rentBook({{ book["id"]}})" class="btn btn-secondary">Rent</button></td>
+                <td>{{ book._id }}</td>
+                <td>{{ book.nameBook }}</td>
+                <td>{{ book.yearBook }}</td>
+                <td>{{ book.availableBook }}</td>
+                <td>{{ ', '.join(book.categoryName) }}</td>
+                <td>{{ book.authorName }}</td>
+                {% if book._id in rents_book_id%}
+                <td><button onclick="rentBook('{{ book._id }}')" class="btn btn-success">Return</button></td>
+                {% elif book.availableBook > 0 %}
+                <td><button onclick="rentBook('{{ book._id }}')" class="btn btn-secondary">Rent</button></td>
                 {% else %}
                 <td><button onclick="" class="btn btn-dark">Out of Stock</button></td>
                 {% endif %}
