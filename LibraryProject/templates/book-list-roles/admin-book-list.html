@@ -1,0 +1,165 @@
+{% extends 'book-list.html' %}
+{% block book_table %}
+        <h1 class="mb-4">Books</h1> 
+        <div class="container">
+            <input type="hidden" id="bookId"/>
+            <div class="form-group">
+                <label for="bookName">Book's name:</label>
+                <input id="bookName" class="form-control" />
+            </div>
+            <div class="form-group">
+                <label for="bookYear">Book's year:</label>
+                <input id="bookYear" class="form-control" type="number" />
+            </div>
+            <div class="form-group">
+                <label for="bookQuantity">Quantity:</label>
+                <input id="bookQuantity" class="form-control" type="number" />
+            </div>
+            <div class="form-group">
+                <label for="bookCategory">Category:</label>
+                <input id="bookCategory" class="form-control" type="number" />
+            </div>
+            <div class="form-group">
+                <label for="bookAuthor">Author:</label>
+                <input id="bookAuthor" class="form-control" type="number" />
+            </div>
+            <div class="form-group">
+                <button id="saveBtn" class="btn btn-primary">Save</button>
+                <button id="resetBtn" class="btn btn-secondary">Reset</button>
+            </div>
+        </div>
+<table class="table table-bordered">
+    <thead class="thead-dark">
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Year</th>
+            <th>Available</th>
+            <th>Category</th>
+            <th>Author</th>
+            <th>Edit</th>
+            <th>Delete</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for book in books %}
+            <tr>
+                <td>{{ book["id"] }}</td>
+                <td>{{ book['namebook']}}</td>
+                <td>{{ book['yearbook']}}</td>
+                <td>{{ book['availablebook'] }}</td>
+                <td>{{ book["category_name"] }}</td>
+                <td>{{ book["author_name"]}}</td>
+                <td><button onclick="getBook({{ book["id"] }})" class="btn btn-secondary">Edit</button></td> 
+                <td><button onclick="deleteBook({{ book["id"] }})" class="btn btn-danger">Delete</button></td>          
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<a type="button" href="rents-list" class="mb-4 btn btn-outline-secondary">View Rents</a>
+<script>
+    async function getBook(id) {
+        const response = await fetch(`/book/${id}`, {        
+        method: "GET",
+        headers: { "Accept": "application/json" }
+        });
+        if (response.ok === true) {
+        const book = await response.json();
+        document.getElementById("bookId").value = book.id;
+        document.getElementById("bookYear").value = book.yearbook;
+        document.getElementById("bookName").value = book.namebook;
+        document.getElementById("bookQuantity").value = book.availablebook;
+        document.getElementById("bookCategory").value = book.category_id;
+        document.getElementById("bookAuthor").value = book.author_id;
+        }
+        else {
+        // якщо сталася помилка, отримуємо повідомлення про помилку
+        const error = await response.json();
+        console.log(error.message); // і виводимо його на консоль
+        }
+    }
+    
+    async function createBook(bookName, bookYear, bookQuantity, bookCategory, bookAuthor) {
+        const response = await fetch("book", {
+            method: "POST",
+            headers: { "Accept": "application/json", "Content-Type": "application/json" },
+            body: JSON.stringify({
+                nameBook: bookName,
+                yearBook: parseInt(bookYear, 10),
+                availableBook: parseInt(bookQuantity, 10),
+                category_id: parseInt(bookCategory, 10),
+                author_id: parseInt(bookAuthor, 10)
+            })
+        });
+        if (response.ok === true) {
+            const user = await response.json();
+            window.location.href = "book-list";
+        } else {
+            const error = await response.json();
+            console.log(error.message);
+        }
+    }
+    
+    async function editBook(bookId, bookName, bookYear, bookQuantity, bookCategory, bookAuthor) {
+        const response = await fetch("book", {
+            method: "PUT",
+            headers: { "Accept": "application/json", "Content-Type": "application/json" },
+            body: JSON.stringify({
+                id: bookId,
+                nameBook: bookName,
+                yearBook: parseInt(bookYear, 10),
+                availableBook: parseInt(bookQuantity, 10),
+                category_id: parseInt(bookCategory, 10),
+                author_id: parseInt(bookAuthor, 10)
+            })
+        });
+        if (response.ok === true) {
+            const book = await response.json();
+            window.location.href = "book-list";
+        } else {
+            const error = await response.json();
+            console.log(error.message);
+        }
+    }
+    // Видалення користувача
+    async function deleteBook(id) {
+    const response = await fetch(`/book/${id}`, {
+    method: "DELETE",
+    headers: { "Accept": "application/json" }
+    });
+    if (response.ok === true) {
+    const book = await response.json();
+    window.location.href = "book-list";
+    }
+    else {
+    const error = await response.json();
+    console.log(error.message);
+    }
+    }
+    // скидання даних форми після відправлення
+    function reset() {
+        document.getElementById("bookId").value = 
+        document.getElementById("bookName").value = 
+        document.getElementById("bookYear").value = 
+        document.getElementById("bookQuantity").value = 
+        document.getElementById("bookCategory").value = 
+        document.getElementById("bookAuthor").value = "";
+    }
+    // скидання значень форми
+    document.getElementById("resetBtn").addEventListener("click", () => reset());
+    // надсилання форми
+    document.getElementById("saveBtn").addEventListener("click", async () => {
+    const id = document.getElementById("bookId").value;
+    const name = document.getElementById("bookName").value;
+    const year = document.getElementById("bookYear").value;
+    const quantity = document.getElementById("bookQuantity").value;
+    const category = document.getElementById("bookCategory").value;
+    const author = document.getElementById("bookAuthor").value;
+    if (id === "")
+        await createBook(name, year, quantity, category, author);
+    else
+        await editBook(id, name, year, quantity, category, author);
+    reset();
+    });
+</script>
+{% endblock %}

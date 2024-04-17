@@ -1,0 +1,55 @@
+{% extends 'book-list.html' %}
+{% block book_table %}
+<table class="table table-bordered">
+    <thead class="thead-dark">
+        <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Year</th>
+            <th>Available</th>
+            <th>Category</th>
+            <th>Author</th>
+            <th>Rent</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for book in books %}
+            <tr>
+                <td>{{ book["id"] }}</td>
+                <td>{{ book['namebook']}}</td>
+                <td>{{ book['yearbook']}}</td>
+                <td>{{ book['availablebook'] }}</td>
+                <td>{{ book["category_name"] }}</td>
+                <td>{{ book["author_name"]}}</td>
+                {% if book["id"] in rents_book_id%}
+                <td><button onclick="rentBook({{ book["id"] }})" class="btn btn-success">Return</button></td>
+                {% elif book.get('availablebook') > 0 %}
+                <td><button onclick="rentBook({{ book["id"]}})" class="btn btn-secondary">Rent</button></td>
+                {% else %}
+                <td><button onclick="" class="btn btn-dark">Out of Stock</button></td>
+                {% endif %}
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+<script>
+    async function rentBook(id) {
+    const response = await fetch(`/book/${id}/rent`, {
+        method: "POST",
+        headers: { "Accept": "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify({
+            id: id
+        })
+    });
+    if (response.ok === true) {
+        const book = await response.json();
+        window.location.href = "book-list";
+        }
+        else {
+        // якщо сталася помилка, отримуємо повідомлення про помилку
+        const error = await response.json();
+        console.log(error.message); // і виводимо його на консоль
+        }
+}
+</script>
+{% endblock %}
