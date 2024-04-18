@@ -21,7 +21,7 @@ password = quote_plus('xPCTVF6:3u,b=qn')
 uri = "mongodb+srv://" + username + ":" + password + "@pythonweb.mbdiw74.mongodb.net/?retryWrites=true&w=majority&appName=PythonWEB"
 # Create a new client and connect to the server
 client = MongoClient(uri, server_api=ServerApi('1'))
-# Send a ping to confirm a successful connection
+
 db = client['LibraryProject']
 
 books_collection = db["Books"]
@@ -232,9 +232,7 @@ def book_page(book_id: str):
         # If the book is not found, raise a 404 exception
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
     
-    # Use the custom JSON encoder to encode the response
     # return {'message': 'Success'}
-    print(book)
     return json.loads(json.dumps(book, cls=CustomJSONEncoder))
 
 
