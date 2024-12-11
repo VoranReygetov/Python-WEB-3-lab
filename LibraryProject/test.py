@@ -5,7 +5,7 @@ from bson.objectid import ObjectId
 
 
 username = quote_plus('reyget')
-password = quote_plus('xPCTVF6:3u,b=qn')
+password = quote_plus('cWX3f3hyzh2XOQf2')
 uri = "mongodb+srv://" + username + ":" + password+"@pythonweb.mbdiw74.mongodb.net/?retryWrites=true&w=majority&appName=PythonWEB"
 # Create a new client and connect to the server
 client = MongoClient(uri, server_api=ServerApi('1'))

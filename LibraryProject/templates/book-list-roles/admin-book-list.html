@@ -17,12 +17,15 @@
             </div>
             <div class="form-group">
                 <label for="bookCategory">Category:</label>
-                <input id="bookCategory" class="form-control" type="text" />
+                <select id="bookCategory" class="form-control">
+                </select>
             </div>
             <div class="form-group">
                 <label for="bookAuthor">Author:</label>
-                <input id="bookAuthor" class="form-control" type="text" />
+                <select id="bookAuthor" class="form-control">
+                </select>
             </div>
+            
             <div class="form-group">
                 <button id="saveBtn" class="btn btn-primary">Save</button>
                 <button id="resetBtn" class="btn btn-secondary">Reset</button>
@@ -58,32 +61,80 @@
 </table>
 <a type="button" href="rents-list" class="mb-4 btn btn-outline-secondary">View Rents</a>
 <script>
-    async function getBook(id) {
-        const response = await fetch(`/book/${id}`, {        
-        method: "GET",
-        headers: { "Accept": "application/json" }
+
+    // Fetch authors and populate the dropdown
+    async function fetchAuthors() {
+        const response = await fetch("/authors", {
+            method: "GET",
+            headers: { "Accept": "application/json" }
         });
         if (response.ok === true) {
-        const book = await response.json();
-        console.log(book);
-
-        document.getElementById("bookId").value = book._id;
-        document.getElementById("bookYear").value = book.yearBook;
-        document.getElementById("bookName").value = book.nameBook;
-        document.getElementById("bookQuantity").value = book.availableBook;
-        document.getElementById("bookCategory").value = book.category_id;
-        document.getElementById("bookAuthor").value = book.author_id;
-        }
-        else {
-        // якщо сталася помилка, отримуємо повідомлення про помилку
-        const error = await response.json();
-        console.log('not working');
-        console.log(error.message); // і виводимо його на консоль
+            const authors = await response.json();
+            const authorSelect = document.getElementById("bookAuthor");
+            authorSelect.innerHTML = "<option value='' disabled selected>Select an author</option>";
+            authors.forEach(author => {
+                const option = document.createElement("option");
+                option.value = author._id; // Assuming `_id` is the unique identifier
+                option.textContent = `${author.nameAuthor} ${author.surnameAuthor}`;
+                authorSelect.appendChild(option);
+            });
+        } else {
+            const error = await response.json();
+            console.log(error.message);
         }
     }
-    
+
+    // Fetch categories and populate the dropdown
+    async function fetchCategories() {
+        const response = await fetch("/categories", {
+            method: "GET",
+            headers: { "Accept": "application/json" }
+        });
+        if (response.ok === true) {
+            const categories = await response.json();
+            const categorySelect = document.getElementById("bookCategory");
+            categorySelect.innerHTML = "<option value='' disabled selected>Select a category</option>";
+            categories.forEach(category => {
+                const option = document.createElement("option");
+                option.value = category._id; // Assuming `_id` is the unique identifier
+                option.textContent = category.nameCategory; // Assuming `name` contains the category's name
+                categorySelect.appendChild(option);
+            });
+        } else {
+            const error = await response.json();
+            console.log(error.message);
+        }
+    }
+
+    // Call these functions on page load
+    document.addEventListener("DOMContentLoaded", () => {
+        fetchAuthors();
+        fetchCategories();
+    });
+
+    async function getBook(id) {
+        const response = await fetch(`/book/${id}`, {
+            method: "GET",
+            headers: { "Accept": "application/json" }
+        });
+        if (response.ok === true) {
+            const book = await response.json();
+            console.log(book);
+
+            document.getElementById("bookId").value = book._id;
+            document.getElementById("bookYear").value = book.yearBook;
+            document.getElementById("bookName").value = book.nameBook;
+            document.getElementById("bookQuantity").value = book.availableBook;
+            document.getElementById("bookCategory").value = book.category_id;
+            document.getElementById("bookAuthor").value = book.author_id;
+        } else {
+            const error = await response.json();
+            console.log(error.message);
+        }
+    }
+
     async function createBook(bookName, bookYear, bookQuantity, bookCategory, bookAuthor) {
-        const response = await fetch("book", {
+        const response = await fetch("/book", {
             method: "POST",
             headers: { "Accept": "application/json", "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -95,16 +146,16 @@
             })
         });
         if (response.ok === true) {
-            const user = await response.json();
-            window.location.href = "book-list";
+            const book = await response.json();
+            window.location.href = "/book-list";
         } else {
             const error = await response.json();
             console.log(error.message);
         }
     }
-    
+
     async function editBook(bookId, bookName, bookYear, bookQuantity, bookCategory, bookAuthor) {
-        const response = await fetch("book", {
+        const response = await fetch("/book", {
             method: "PUT",
             headers: { "Accept": "application/json", "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -118,28 +169,27 @@
         });
         if (response.ok === true) {
             const book = await response.json();
-            window.location.href = "book-list";
+            window.location.href = "/book-list";
         } else {
             const error = await response.json();
             console.log(error.message);
         }
     }
-    // Видалення користувача
+
     async function deleteBook(id) {
-    const response = await fetch(`/book/${id}`, {
-    method: "DELETE",
-    headers: { "Accept": "application/json" }
-    });
-    if (response.ok === true) {
-    const book = await response.json();
-    window.location.href = "book-list";
+        const response = await fetch(`/book/${id}`, {
+            method: "DELETE",
+            headers: { "Accept": "application/json" }
+        });
+        if (response.ok === true) {
+            const book = await response.json();
+            window.location.href = "/book-list";
+        } else {
+            const error = await response.json();
+            console.log(error.message);
+        }
     }
-    else {
-    const error = await response.json();
-    console.log(error.message);
-    }
-    }
-    // скидання даних форми після відправлення
+
     function reset() {
         document.getElementById("bookId").value = 
         document.getElementById("bookName").value = 
@@ -148,21 +198,20 @@
         document.getElementById("bookCategory").value = 
         document.getElementById("bookAuthor").value = "";
     }
-    // скидання значень форми
+
     document.getElementById("resetBtn").addEventListener("click", () => reset());
-    // надсилання форми
     document.getElementById("saveBtn").addEventListener("click", async () => {
-    const id = document.getElementById("bookId").value;
-    const name = document.getElementById("bookName").value;
-    const year = document.getElementById("bookYear").value;
-    const quantity = document.getElementById("bookQuantity").value;
-    const category = document.getElementById("bookCategory").value;
-    const author = document.getElementById("bookAuthor").value;
-    if (id === "")
-        await createBook(name, year, quantity, category, author);
-    else
-        await editBook(id, name, year, quantity, category, author);
-    reset();
+        const id = document.getElementById("bookId").value;
+        const name = document.getElementById("bookName").value;
+        const year = document.getElementById("bookYear").value;
+        const quantity = document.getElementById("bookQuantity").value;
+        const category = document.getElementById("bookCategory").value;
+        const author = document.getElementById("bookAuthor").value;
+        if (id === "")
+            await createBook(name, year, quantity, category, author);
+        else
+            await editBook(id, name, year, quantity, category, author);
+        reset();
     });
 </script>
 {% endblock %}

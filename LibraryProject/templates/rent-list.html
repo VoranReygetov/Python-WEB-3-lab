@@ -16,24 +16,28 @@
         <table class="table table-bordered">
             <thead class="thead-dark">
                 <tr>
-                    <th>ID</th>
+                    <th>Rent ID</th>
                     <th>User ID</th>
+                    <th>Username</th>
                     <th>Book ID</th>
-                    <th>Loan Date</th>
-                    <th>Return Date</th>
+                    <th>Book Name</th>
+                    <th>Date Loan</th>
+                    <th>Date Return</th>
                     <th>Is Returned</th>
                 </tr>
             </thead>
             <tbody>
                 {% for rent in rents %}
-                    <tr>
-                        <td>{{ rent['_id'] }}</td>
-                        <td>{{ rent['user_id'] }}</td>
-                        <td>{{ rent['books_id'] }}</td>
-                        <td>{{ rent['dateLoan'] }}</td>
-                        <td>{{ rent['dateReturn'] }}</td>
-                        <td>{{ rent['isReturned'] }}</td>                        
-                    </tr>
+                <tr>
+                    <td>{{ rent['_id'] }}</td>
+                    <td>{{ rent['user_id'] }}</td>
+                    <td>{{ rent['username'] }}</td>
+                    <td>{{ rent['books_id'] }}</td>
+                    <td>{{ rent['bookName'] }}</td>
+                    <td>{{ rent['dateLoan'] }}</td>
+                    <td>{{ rent['dateReturn'] }}</td>
+                    <td>{{ rent['isReturned'] }}</td>
+                </tr>
                 {% endfor %}
             </tbody>
         </table>

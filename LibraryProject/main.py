@@ -1,3 +1,6 @@
+import os
+from dotenv import load_dotenv
+
 from fastapi import Depends, FastAPI, Body, HTTPException, status, Response, Cookie
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, HTMLResponse
 from jinja2 import Environment, FileSystemLoader
@@ -16,9 +19,9 @@ from datetime import datetime
 file_loader = FileSystemLoader('templates')
 env = Environment(loader=file_loader)
 
-username = quote_plus('reyget')
-password = quote_plus('xPCTVF6:3u,b=qn')
-uri = "mongodb+srv://" + username + ":" + password + "@pythonweb.mbdiw74.mongodb.net/?retryWrites=true&w=majority&appName=PythonWEB"
+username = quote_plus(os.getenv('MONGO_USERNAME'))
+password = quote_plus(os.getenv('MONGO_PASSWORD'))
+uri = os.getenv('MONGO_URI')
 # Create a new client and connect to the server
 client = MongoClient(uri, server_api=ServerApi('1'))
 
@@ -31,6 +34,7 @@ histories_collection = db["Histories"]
 users_collection = db["Users"]
 
 app = FastAPI(swagger_ui_parameters={"syntaxHighlight.theme": "obsidian"})     #uvicorn main:app --reload
+
 
 def custom_openapi():
     if app.openapi_schema:
@@ -51,6 +55,7 @@ def custom_openapi():
     app.openapi_schema = openapi_schema
     return app.openapi_schema
 app.openapi = custom_openapi
+
 
 @app.get("/", summary="Redirect to login page")
 def main():
@@ -102,9 +107,11 @@ def login(data = Body()):
     except:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login failed")
 
+
 @app.get("/registration", summary="Registration page")
 def register_page():
     return FileResponse("templates/registration.html")
+
 
 @app.post("/registration", summary="Post method for Registration")
 def create_user(data = Body()):
@@ -130,6 +137,41 @@ def create_user(data = Body()):
     response.set_cookie(key="password", value=data.get("passwordUser"))
     return response
 
+
+@app.get("/categories")
+async def get_categories():
+    """
+    Fetches all categories and returns them in a list.
+    """
+    try:
+        categories = list(categories_collection.find({}, {"_id": 1, "nameCategory": 1}))
+        return [
+            {"_id": str(category["_id"]), "nameCategory": category["nameCategory"]}
+            for category in categories
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.get("/authors")
+async def get_authors():
+    """
+    Fetches all authors and returns them in a list.
+    """
+    try:
+        authors = list(authors_collection.find({}, {"_id": 1, "nameAuthor": 1, "surnameAuthor": 1}))
+        return [
+            {
+                "_id": str(author["_id"]),
+                "nameAuthor": author["nameAuthor"],
+                "surnameAuthor": author["surnameAuthor"]
+            }
+            for author in authors
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+        
+
 @app.get("/book-list", summary="Books view in library")
 def book_list_page(
     email: str | None = Cookie(default=None),
@@ -145,6 +187,7 @@ def book_list_page(
     else:
         return RedirectResponse("/login")
     
+
 def render_book_list(email: str, password: str):
     """
     Returns the render of the book list page.
@@ -213,6 +256,7 @@ class CustomJSONEncoder(json.JSONEncoder):
         if isinstance(o, ObjectId):
             return str(o)
         return super().default(o)
+
 
 @app.get("/book/{book_id}", summary="Get for getting one specific book")
 def book_page(book_id: str):
@@ -331,7 +375,7 @@ def rent_book(
     """
     Rent a book for a user.
     """
-    date_now = datetime.now()
+    date_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     user = authenticate_user(email, password)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
@@ -381,19 +425,60 @@ def book_list_page(
         return RedirectResponse("/login")
 
 def render_rent_list(user):
+    """
+    Renders the rent list with additional data for usernames and book names.
+    """
     book_list_page = env.get_template('rent-list.html')
-    rents_list = []
-    
-    # Retrieve rental records from the Histories collection
-    rents = histories_collection.find().sort([("isReturned", 1), ("dateLoan", -1)])
-    for rent in rents:
-        rents_list.append(rent)
-    
+
+    # Aggregating rental data with user and book information
+    rents = histories_collection.aggregate([
+        {
+            "$lookup": {
+                "from": "Users",  # The name of the Users collection
+                "localField": "user_id",  # Field in Histories to match
+                "foreignField": "_id",  # Field in Users to match
+                "as": "user"  # Output array field for joined data
+            }
+        },
+        {
+            "$lookup": {
+                "from": "Books",  # The name of the Books collection
+                "localField": "books_id",  # Field in Histories to match
+                "foreignField": "_id",  # Field in Books to match
+                "as": "book"  # Output array field for joined data
+            }
+        },
+        {
+            "$unwind": "$user"  # Flatten the user array
+        },
+        {
+            "$unwind": "$book"  # Flatten the book array
+        },
+        {
+            "$project": {
+                "_id": 1,
+                "user_id": 1,
+                "books_id": 1,
+                "dateLoan": 1,
+                "dateReturn": 1,
+                "isReturned": 1,
+                "username": "$user.emailUser",  # Replace with the correct username field in Users
+                "bookName": "$book.nameBook"  # Replace with the correct book name field in Books
+            }
+        },
+        {
+            "$sort": {"isReturned": 1, "dateLoan": -1}
+        }
+    ])
+
+    rents_list = list(rents)  # Convert the cursor to a list
+
     output = book_list_page.render(
         rents=rents_list,
-        username=user['emailUser']
+        username=user['emailUser']  # Pass the current user's email
     )
     return output
+
 
 @app.post("/authors", summary="Post method for Authors")
 def authors_post_page(data: list[dict] = Body(...)):

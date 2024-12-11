@@ -3,8 +3,8 @@ from pymongo.server_api import ServerApi
 from urllib.parse import quote_plus
 
 username = quote_plus('reyget')
-password = quote_plus('xPCTVF6:3u,b=qn')
-uri = "mongodb+srv://" + username + ":" + password+"@pythonweb.mbdiw74.mongodb.net/?retryWrites=true&w=majority&appName=PythonWEB"
+password = quote_plus('cWX3f3hyzh2XOQf2')
+uri = "mongodb+srv://" + username + ":" + password + "@libraryproject.2tink.mongodb.net/?retryWrites=true&w=majority&appName=LibraryProject"
 # Create a new client and connect to the server
 client = MongoClient(uri, server_api=ServerApi('1'))
 # Send a ping to confirm a successful connection
