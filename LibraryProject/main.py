@@ -5,8 +5,9 @@ import jwt
 from dotenv import load_dotenv
 
 from datetime import datetime, timedelta
-from fastapi import Depends, FastAPI, Body, HTTPException, status, Response, Cookie
+from fastapi import Depends, FastAPI, Body, HTTPException, status, Response, Cookie, Request
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, HTMLResponse
+from fastapi.security import OAuth2PasswordBearer
 from jinja2 import Environment, FileSystemLoader
 from fastapi.openapi.utils import get_openapi
 
@@ -15,9 +16,7 @@ from pymongo.server_api import ServerApi
 from urllib.parse import quote_plus
 from bson.objectid import ObjectId
 
-from contextlib import contextmanager
-
-
+favicon_path = 'favicon.ico'
 #enviroment for jinja2
 file_loader = FileSystemLoader('templates')
 env = Environment(loader=file_loader)
@@ -26,6 +25,9 @@ env = Environment(loader=file_loader)
 load_dotenv()
 
 SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
 username = quote_plus(os.getenv('MONGO_USERNAME'))
 password = quote_plus(os.getenv('MONGO_PASSWORD'))
 uri = os.getenv('MONGO_URI')
@@ -42,6 +44,9 @@ users_collection = db["Users"]
 
 app = FastAPI(swagger_ui_parameters={"syntaxHighlight.theme": "obsidian"})     #uvicorn main:app --reload
 
+@app.get('/favicon.ico', include_in_schema=False)
+async def favicon():
+    return FileResponse(favicon_path)
 
 def custom_openapi():
     if app.openapi_schema:
@@ -69,56 +74,46 @@ def main():
     """
     Redirect form empty page.
     """
+    print('test')
     return RedirectResponse("/login")
 
-def authenticate_user(email, password):
-    """
-    Authenticates a user by checking their email and password.
-    """
-    # Access the Users collection
-    users_collection = db['Users']
-    # Find the user with the specified email
-    searched_user = users_collection.find_one({"emailUser": email})
 
-    # If the user is found and the password matches, return the user document
-    if searched_user and bcrypt.checkpw(password.encode('utf-8'), searched_user.get("passwordUser").encode('utf-8')):
-        return searched_user
-
-    return None
+def authenticate_user(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return verify_token(token)
 
 
 @app.get("/login", summary="Login page")
-def login_get(email: str | None = Cookie(default=None), password: str | None = Cookie(default=None)):
-    """
-    Retrieves the login page.
-    """
-    user = authenticate_user(email, password)
-    if user:
-        return RedirectResponse("/book-list")
+def login_get(request: Request):
+    token = request.cookies.get("access_token")
+    if token:
+        try:
+            user_data = verify_token(token)
+            user = db['Users'].find_one({"emailUser": user_data["sub"]})
+            if user:
+                return RedirectResponse("/book-list")
+        except Exception:
+            pass  # Invalid or expired token
     return FileResponse("templates/login.html")
 
 
-@app.post("/login", summary="Post method for LogIn")
+
+@app.post("/login", summary="Login to obtain JWT token")
 def login(data=Body()):
-    """
-    Handles the login request.
-    """
     email = data.get("emailUser")
     password = data.get("passwordUser")
     searched_user = db['Users'].find_one({"emailUser": email})
-    if not searched_user:
+
+    if not searched_user or not bcrypt.checkpw(password.encode('utf-8'), searched_user['passwordUser'].encode('utf-8')):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login failed")
-    try:
-        # Verify the password
-        if bcrypt.checkpw(password.encode('utf-8'), searched_user['passwordUser'].encode('utf-8')):
-            response = JSONResponse(content={"message": f"{searched_user}"})
-            response.set_cookie(key="email", value=data.get("emailUser"))
-            response.set_cookie(key="password", value=data.get("passwordUser"))
-            return response
-        else:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login failed")
-    except:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login failed")
+
+    token = create_access_token({"sub": searched_user['emailUser']}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    response = JSONResponse(content={"message": "Login successful"})
+    response.set_cookie(key="access_token", value=token, httponly=True, secure=True)
+    return response
+
 
 
 @app.get("/registration", summary="Registration page")
@@ -130,11 +125,15 @@ def register_page():
 def create_user(data=Body()):
     """
     Creates a new user with the provided data, hashing the password.
+    Also includes the creation date of the user.
     """
     try:
         # Hash the password
         hashed_password = bcrypt.hashpw(data["passwordUser"].encode('utf-8'), bcrypt.gensalt())
-        
+
+        # Add the creation date
+        creation_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         # Insert user data into the MongoDB collection
         inserted_user = users_collection.insert_one({
             "nameUser": data["nameUser"],
@@ -142,15 +141,24 @@ def create_user(data=Body()):
             "passwordUser": hashed_password.decode('utf-8'),  # Store as string
             "is_admin": False,
             "emailUser": data["emailUser"],
-            "numberUser": data["numberUser"]
+            "numberUser": data["numberUser"],
+            "created_at": creation_date  # Adding the creation date
         })
-        user = users_collection.find_one({"_id": inserted_user.inserted_id})
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Registration failed")
 
-    response = JSONResponse(content={"message": f"{user}"})
-    response.set_cookie(key="email", value=data.get("emailUser"))
-    response.set_cookie(key="password", value=data.get("passwordUser"))
+        # Fetch the inserted user to confirm
+        user = users_collection.find_one({"_id": inserted_user.inserted_id})
+
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Registration failed")
+
+    response = JSONResponse(content={"message": f"User {user['nameUser']} successfully registered"})
+    
+    # Create access token for the user
+    token = create_access_token({"sub": user['emailUser']}, expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    
+    # Set the token in the response cookie
+    response.set_cookie(key="access_token", value=token, httponly=True, secure=True)
+
     return response
 
 
@@ -189,26 +197,15 @@ async def get_authors():
         
 
 @app.get("/book-list", summary="Books view in library")
-def book_list_page(
-    email: str | None = Cookie(default=None),
-    password: str | None = Cookie(default=None)
-):
-    """
-    Returns the book list page.
-    """
-    user = authenticate_user(email, password)
-    if user:
-        output = render_book_list(email, password)
-        return HTMLResponse(output)
-    else:
-        return RedirectResponse("/login")
+def book_list_page(request: Request):
+    user_data = authenticate_user(request)
+    user = db['Users'].find_one({"emailUser": user_data["sub"]})
+    
+    output = render_book_list(user)
+    return HTMLResponse(output)
     
 
-def render_book_list(email: str, password: str):
-    """
-    Returns the render of the book list page.
-    """
-    user = authenticate_user(email, password)
+def render_book_list(user):
     if user["is_admin"]:
         template_file = 'book-list-roles/admin-book-list.html'
     else:
@@ -217,7 +214,6 @@ def render_book_list(email: str, password: str):
     book_list_page = env.get_template(template_file)
     rents_book_id = []
 
-    # Fetching books data
     books_dict = books_collection.aggregate([
         {
             "$lookup": {
@@ -236,7 +232,7 @@ def render_book_list(email: str, password: str):
             }
         },
         {
-            "$unwind": "$author"  # Unwind the "author" array to separate the documents
+            "$unwind": "$author"
         },
         {
             "$project": {
@@ -253,18 +249,15 @@ def render_book_list(email: str, password: str):
         }
     ])
 
-    # Fetching rented books for non-admin users
     if not user["is_admin"]:
-        rents = histories_collection.find({"user_id": user["_id"], "isReturned": False}, {"books_id": 1})
-        rents_book_id = [rent["books_id"] for rent in rents]
+        rents = histories_collection.find({"user_id": user["_id"], "isReturned": False}, {"book_id": 1})
+        rents_book_id = [rent["book_id"] for rent in rents]
 
-    # Renders the book list page with appropriate data
     output = book_list_page.render(
         books=books_dict,
-        username=email,
+        username=user["emailUser"],
         rents_book_id=rents_book_id
     )
-    
     return output
 
 class CustomJSONEncoder(json.JSONEncoder):
@@ -298,42 +291,42 @@ def book_page(book_id: str):
 
 @app.post("/book", summary="Post method for Book")
 def book_post_page(
-    email: str | None = Cookie(default=None),
-    password: str | None = Cookie(default=None),
-    book_data=Body()
+    request: Request,
+    data = Body()
 ):
     """
     Adds a new book to the library.
     """
-    user = authenticate_user(email, password)
+    user_data = authenticate_user(request)
+    user = db['Users'].find_one({"emailUser": user_data["sub"]})
+
     if not user["is_admin"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authorization failed")
+    
     # Insert the book data into the Books collection
-    result = books_collection.insert_one({
-        "nameBook": book_data.get("nameBook"),
-        "yearBook": book_data.get("yearBook"),
-        "availableBook": book_data.get("availableBook"),
-        "category_id": ObjectId(book_data.get("category_id")),
-        "author_id": ObjectId(book_data.get("author_id"))
+    books_collection.insert_one({
+        "nameBook": data.get("nameBook"),
+        "yearBook": data.get("yearBook"),
+        "availableBook": data.get("availableBook"),
+        "category_id": ObjectId(data.get("category_id")),
+        "author_id": ObjectId(data.get("author_id"))
     })
-    # Retrieve the inserted book from the collection
-    inserted_book = books_collection.find_one({"_id": result.inserted_id})
-    # Convert ObjectId to str for JSON serialization
 
-    return {'message': 'Inserted successfully'}
+    return {"message": "Book rented successfully."}
         
 
 @app.put("/book", summary="Put method for Book")
 def edit_book(
-    email: str | None = Cookie(default=None),
-    password: str | None = Cookie(default=None),
-    data = Body(),
+    request: Request,
+    data = Body()
 ):
     """
     Edits an existing book in the library.
     """
-    user = authenticate_user(email, password)
-    if not user["is_admin"]:
+    user_data = authenticate_user(request)
+    user = db['Users'].find_one({"emailUser": user_data["sub"]})
+
+    if not user or not user.get("is_admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authorization failed")
     
     try:
@@ -349,22 +342,24 @@ def edit_book(
             }}
         )
         if result.matched_count == 0:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book does not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Book not found")
         
-        # Retrieve the updated book from the collection
-        updated_book = books_collection.find_one({"_id": data.get("id")})
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error updating book in the database")
 
     return {'message': 'Updated successfully'}
 
 @app.delete("/book/{book_id}", summary="Delete method for Book")
-def delete_book(book_id: str, email: str | None = Cookie(default=None), password: str | None = Cookie(default=None)):
+def delete_book(
+    book_id: str, request: Request
+):
     """
     Deletes a book from the library based on its ID.
     """
-    user = authenticate_user(email, password)
-    if not user["is_admin"]:
+    user_data = authenticate_user(request)
+    user = db['Users'].find_one({"emailUser": user_data["sub"]})
+
+    if not user or not user.get("is_admin"):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authorization failed")
 
     try:
@@ -383,62 +378,71 @@ def delete_book(book_id: str, email: str | None = Cookie(default=None), password
 
 
 @app.post("/book/{book_id}/rent", summary="Renting a book")
-def rent_book(
-    book_id: str,
-    email: str | None = Cookie(default=None),
-    password: str | None = Cookie(default=None)
-):
+def rent_book(book_id: str, request: Request):
     """
-    Rent a book for a user.
+    Rent or return a book for a user.
     """
     date_now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    user = authenticate_user(email, password)
+
+    # Authenticate user
+    user_data = authenticate_user(request)
+    user = db['Users'].find_one({"emailUser": user_data["sub"]})
+
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication failed")
 
     try:
-        # Converts the book_id to ObjectId
+        # Convert the book_id to ObjectId
         book_id_obj = ObjectId(book_id)
-        
-        # Checks if there's an existing rental record
-        rent = histories_collection.find_one({"user_id": user['_id'], "books_id": book_id_obj, "isReturned": False})
-        if rent:  # If rental record already exists
-            # Updates existing rental record
+
+        # Check if there's an existing rental record
+        rent = histories_collection.find_one({"user_id": user['_id'], "book_id": book_id_obj, "isReturned": False})
+
+        if rent:  # If rental record already exists (returning the book)
+            # Update the existing rental record
             histories_collection.update_one(
                 {"_id": rent["_id"]},
                 {"$set": {"isReturned": True, "dateReturn": date_now}}
             )
-            # Increases the availableBook count in the Books collection
+            # Increase the availableBook count in the Books collection
             books_collection.update_one({"_id": book_id_obj}, {"$inc": {"availableBook": 1}})
-        else:  # Else creates a new rental record
-            # Inserts new rental record
+            # Fetch updated availableBook count
+            updated_book = books_collection.find_one({"_id": book_id_obj})
+            available_books = updated_book["availableBook"]
+            return {"message": "Book returned successfully.", "availableBook": available_books}
+
+        else:  # Else create a new rental record (renting the book)
+            # Insert a new rental record
             histories_collection.insert_one({
                 "user_id": user['_id'],
-                "books_id": book_id_obj,
+                "book_id": book_id_obj,
                 "dateLoan": date_now,
                 "isReturned": False
             })
-            # Decreases the availableBook count in the Books collection
+            # Decrease the availableBook count in the Books collection
             books_collection.update_one({"_id": book_id_obj}, {"$inc": {"availableBook": -1}})
+            # Fetch updated availableBook count
+            updated_book = books_collection.find_one({"_id": book_id_obj})
+            available_books = updated_book["availableBook"]
+            return {"message": "Book rented successfully.", "availableBook": available_books}
+
     except Exception as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-    
-    return {"message": "Book rented successfully."}
+
+
 
 @app.get("/rents-list", summary="List of Rents")
-def book_list_page(
-    email: str | None = Cookie(default=None),
-    password: str | None = Cookie(default=None)
-):
-    user = authenticate_user(email, password)
-    if user:
-        if user["is_admin"]:
-            output = render_rent_list(user)
-            return HTMLResponse(output)
-        else:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authorization failed")
+def book_list_page(request: Request):
+
+    user_data = authenticate_user(request)
+    user = db['Users'].find_one({"emailUser": user_data["sub"]})
+
+    if user and user.get("is_admin"):
+        output = render_rent_list(user)
+        return HTMLResponse(output)
     else:
-        return RedirectResponse("/login")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Authorization failed")
+
 
 def render_rent_list(user):
     """
@@ -459,7 +463,7 @@ def render_rent_list(user):
         {
             "$lookup": {
                 "from": "Books",  # The name of the Books collection
-                "localField": "books_id",  # Field in Histories to match
+                "localField": "book_id",  # Field in Histories to match
                 "foreignField": "_id",  # Field in Books to match
                 "as": "book"  # Output array field for joined data
             }
@@ -474,7 +478,7 @@ def render_rent_list(user):
             "$project": {
                 "_id": 1,
                 "user_id": 1,
-                "books_id": 1,
+                "book_id": 1,
                 "dateLoan": 1,
                 "dateReturn": 1,
                 "isReturned": 1,
@@ -545,26 +549,29 @@ def books_post_page(data: list[dict] = Body(...)):
     return books_dict
 
 
-@app.get("/clear-cookie", summary="Clearing Cookies")
-def clear_cookie(response: Response):
-    response.delete_cookie("email")
-    response.delete_cookie("password")
-    return {"message": "Cookie cleared successfully"}
+@app.get("/clear-cookie", summary="Clear the authentication cookie")
+def clear_cookie():
+    response = RedirectResponse("/login")
+    response.delete_cookie("access_token")
+    return response
 
 
-def create_access_token(data: dict, expires_delta: timedelta = timedelta(hours=1)):
+def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)):
     to_encode = data.copy()
-    expire = datetime.utcnow() + expires_delta
+    expire = datetime.now() + expires_delta
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    print("JWT created:", encoded_jwt)  # Log for debugging
     return encoded_jwt
+
 
 def verify_token(token: str):
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
-    except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-        )
+    except jwt.ExpiredSignatureError:
+        print(f"Expired token error: {e}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
+    except jwt.InvalidTokenError as e:
+        print(f"Invalid token error2: {e}")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
