@@ -1,6 +1,10 @@
 import os
+import bcrypt
+import json
+import jwt
 from dotenv import load_dotenv
 
+from datetime import datetime, timedelta
 from fastapi import Depends, FastAPI, Body, HTTPException, status, Response, Cookie
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse, HTMLResponse
 from jinja2 import Environment, FileSystemLoader
@@ -12,13 +16,16 @@ from urllib.parse import quote_plus
 from bson.objectid import ObjectId
 
 from contextlib import contextmanager
-import json
-from datetime import datetime
+
 
 #enviroment for jinja2
 file_loader = FileSystemLoader('templates')
 env = Environment(loader=file_loader)
 
+# Load environment variables from the .env file
+load_dotenv()
+
+SECRET_KEY = os.getenv("SECRET_KEY")
 username = quote_plus(os.getenv('MONGO_USERNAME'))
 password = quote_plus(os.getenv('MONGO_PASSWORD'))
 uri = os.getenv('MONGO_URI')
@@ -65,13 +72,16 @@ def main():
     return RedirectResponse("/login")
 
 def authenticate_user(email, password):
+    """
+    Authenticates a user by checking their email and password.
+    """
     # Access the Users collection
     users_collection = db['Users']
     # Find the user with the specified email
     searched_user = users_collection.find_one({"emailUser": email})
 
     # If the user is found and the password matches, return the user document
-    if searched_user and searched_user.get("passwordUser") == password:
+    if searched_user and bcrypt.checkpw(password.encode('utf-8'), searched_user.get("passwordUser").encode('utf-8')):
         return searched_user
 
     return None
@@ -87,17 +97,20 @@ def login_get(email: str | None = Cookie(default=None), password: str | None = C
         return RedirectResponse("/book-list")
     return FileResponse("templates/login.html")
 
-    
+
 @app.post("/login", summary="Post method for LogIn")
-def login(data = Body()):
+def login(data=Body()):
     """
     Handles the login request.
     """
     email = data.get("emailUser")
     password = data.get("passwordUser")
     searched_user = db['Users'].find_one({"emailUser": email})
+    if not searched_user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login failed")
     try:
-        if searched_user['passwordUser'] == password:
+        # Verify the password
+        if bcrypt.checkpw(password.encode('utf-8'), searched_user['passwordUser'].encode('utf-8')):
             response = JSONResponse(content={"message": f"{searched_user}"})
             response.set_cookie(key="email", value=data.get("emailUser"))
             response.set_cookie(key="password", value=data.get("passwordUser"))
@@ -114,16 +127,19 @@ def register_page():
 
 
 @app.post("/registration", summary="Post method for Registration")
-def create_user(data = Body()):
+def create_user(data=Body()):
     """
-    Creates a new user with the provided data.
+    Creates a new user with the provided data, hashing the password.
     """
     try:
+        # Hash the password
+        hashed_password = bcrypt.hashpw(data["passwordUser"].encode('utf-8'), bcrypt.gensalt())
+        
         # Insert user data into the MongoDB collection
         inserted_user = users_collection.insert_one({
             "nameUser": data["nameUser"],
             "surnameUser": data["surnameUser"],
-            "passwordUser": data["passwordUser"],
+            "passwordUser": hashed_password.decode('utf-8'),  # Store as string
             "is_admin": False,
             "emailUser": data["emailUser"],
             "numberUser": data["numberUser"]
@@ -534,3 +550,21 @@ def clear_cookie(response: Response):
     response.delete_cookie("email")
     response.delete_cookie("password")
     return {"message": "Cookie cleared successfully"}
+
+
+def create_access_token(data: dict, expires_delta: timedelta = timedelta(hours=1)):
+    to_encode = data.copy()
+    expire = datetime.utcnow() + expires_delta
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
+    return encoded_jwt
+
+def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        return payload
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+        )
