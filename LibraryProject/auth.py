@@ -5,10 +5,11 @@ from fastapi import HTTPException, status, Request
 from config import SECRET_KEY, ALGORITHM
 
 
-def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=30)):
+def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=1)):
     to_encode = data.copy()
     expire = datetime.now() + expires_delta
-    to_encode.update({"exp": expire})
+    print(datetime.now(), expire)  # Перевіряємо значення
+    to_encode.update({"exp": int(expire.timestamp())})  # Конвертація в UNIX timestamp
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def verify_token(token: str):

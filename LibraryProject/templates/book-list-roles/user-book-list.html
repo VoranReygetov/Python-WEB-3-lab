@@ -32,6 +32,7 @@
         {% endfor %}
     </tbody>
 </table>
+<a type="button" href="rents-list" class="mb-4 btn btn-outline-secondary">View Rents</a>
 <script>
     async function rentBook(id) {
         const response = await fetch(`/book/${id}/rent`, {
